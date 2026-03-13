@@ -559,3 +559,81 @@ fn insert_initial_context_before_last_real_user_or_summary_keeps_compaction_last
     ];
     assert_eq!(refreshed, expected);
 }
+
+#[test]
+fn always_remote_compaction_env_parses_truthy_and_falsey_values() {
+    assert_eq!(always_remote_compaction_enabled_from_env(None), None);
+    assert_eq!(always_remote_compaction_enabled_from_env(Some("")), None);
+    assert_eq!(always_remote_compaction_enabled_from_env(Some("   ")), None);
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("1")),
+        Some(true)
+    );
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("true")),
+        Some(true)
+    );
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("yes")),
+        Some(true)
+    );
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("on")),
+        Some(true)
+    );
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("0")),
+        Some(false)
+    );
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("false")),
+        Some(false)
+    );
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("no")),
+        Some(false)
+    );
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("off")),
+        Some(false)
+    );
+    assert_eq!(
+        always_remote_compaction_enabled_from_env(Some("force-it")),
+        Some(true)
+    );
+}
+
+#[test]
+fn remote_compaction_gate_uses_provider_when_env_is_unset() {
+    let remote_provider = crate::model_provider_info::built_in_model_providers()["openai"].clone();
+    let local_provider = crate::model_provider_info::create_oss_provider_with_base_url(
+        "http://localhost:11434/v1",
+        crate::WireApi::Responses,
+    );
+
+    assert!(
+        always_remote_compaction_enabled_from_env(None)
+            .unwrap_or_else(|| remote_provider.is_openai())
+    );
+    assert!(
+        !always_remote_compaction_enabled_from_env(None)
+            .unwrap_or_else(|| local_provider.is_openai())
+    );
+}
+
+#[test]
+fn remote_compaction_gate_env_override_forces_remote_for_non_openai_provider() {
+    let provider = crate::model_provider_info::create_oss_provider_with_base_url(
+        "http://localhost:11434/v1",
+        crate::WireApi::Responses,
+    );
+
+    assert!(
+        always_remote_compaction_enabled_from_env(Some("1"))
+            .unwrap_or_else(|| provider.is_openai())
+    );
+    assert!(
+        !always_remote_compaction_enabled_from_env(Some("false"))
+            .unwrap_or_else(|| provider.is_openai())
+    );
+}

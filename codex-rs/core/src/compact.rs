@@ -31,6 +31,7 @@ use tracing::error;
 pub const SUMMARIZATION_PROMPT: &str = include_str!("../templates/compact/prompt.md");
 pub const SUMMARY_PREFIX: &str = include_str!("../templates/compact/summary_prefix.md");
 const COMPACT_USER_MESSAGE_MAX_TOKENS: usize = 20_000;
+const ALWAYS_REMOTE_COMPACTION_ENV_VAR: &str = "ALWAYS_REMOTE_COMPACTION";
 
 /// Controls whether compaction replacement history must include initial context.
 ///
@@ -48,7 +49,28 @@ pub(crate) enum InitialContextInjection {
 }
 
 pub(crate) fn should_use_remote_compact_task(provider: &ModelProviderInfo) -> bool {
-    provider.is_openai()
+    always_remote_compaction_enabled().unwrap_or_else(|| provider.is_openai())
+}
+
+fn always_remote_compaction_enabled() -> Option<bool> {
+    always_remote_compaction_enabled_from_env(
+        std::env::var(ALWAYS_REMOTE_COMPACTION_ENV_VAR)
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn always_remote_compaction_enabled_from_env(value: Option<&str>) -> Option<bool> {
+    let value = value?.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    match value.to_ascii_lowercase().as_str() {
+        "0" | "false" | "no" | "off" => Some(false),
+        "1" | "true" | "yes" | "on" => Some(true),
+        _ => Some(true),
+    }
 }
 
 pub(crate) async fn run_inline_auto_compact_task(

@@ -167,6 +167,9 @@ impl TranscriptOverlay {
                 frame.set_cursor_position(cursor);
             }
         })?;
+        if let Some(delay) = self.view.scrollbar_hide_delay() {
+            tui.frame_requester().schedule_frame_in(delay);
+        }
         let loading = self.view.is_loading_history() && self.motion == MotionMode::Animated;
         if scanning || loading {
             tui.frame_requester()
@@ -193,6 +196,7 @@ impl TranscriptOverlay {
         if matches!(event, TuiEvent::Resume | TuiEvent::FocusLost) {
             self.view.cancel_primary();
             self.view.end_drag();
+            self.view.end_scrollbar_interaction();
         }
         // Apply a queued prompt jump before navigation can move away from it.
         if self.pending_highlight.is_some()

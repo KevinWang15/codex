@@ -16,6 +16,7 @@ mod input;
 mod layout;
 mod mutations;
 mod prompt_header;
+mod scrollbar;
 mod search;
 mod select_mode;
 mod selection;
@@ -110,6 +111,7 @@ struct VisibleRow {
 pub(crate) struct TranscriptView {
     pub(crate) mouse_scroll_speed: f64,
     pending_mouse_scroll: f64,
+    scrollbar: scrollbar::Scrollbar,
     pub(crate) copy_on_select: bool,
     pub(crate) copy_on_select_clear_selection: bool,
     pub(crate) primary_selection: bool,
@@ -149,6 +151,7 @@ impl Default for TranscriptView {
         Self {
             mouse_scroll_speed: 1.0,
             pending_mouse_scroll: 0.0,
+            scrollbar: scrollbar::Scrollbar::default(),
             copy_on_select: false,
             copy_on_select_clear_selection: false,
             primary_selection: false,
@@ -322,6 +325,7 @@ impl TranscriptView {
             self.scroll(current_cells, /*rows*/ 0);
         }
         self.render_search(buf);
+        self.render_scrollbar(buf, cells);
     }
 
     pub(crate) fn sync_live_tail(
@@ -389,6 +393,7 @@ impl TranscriptView {
         self.copy_mode = None;
         self.release_live_reading();
         self.cache.clear();
+        self.scrollbar.heights.clear();
         self.suppressed_prompt_header = None;
         self.live_key = None;
         // Keep search's origin independent of either presentation's saved position.
@@ -403,7 +408,8 @@ impl TranscriptView {
     }
 
     pub(crate) fn has_active_interaction(&self) -> bool {
-        self.select_mode.is_some()
+        self.scrollbar.drag.is_some()
+            || self.select_mode.is_some()
             || self.selection.is_some()
             || self.search.is_active()
             || self.is_activity_focused()

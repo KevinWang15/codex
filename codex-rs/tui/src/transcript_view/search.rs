@@ -134,6 +134,7 @@ impl TranscriptView {
         self.search.editor.set_keymap_bindings(keymap);
         self.disclosure.keymap = keymap.clone();
         self.cache.clear();
+        self.scrollbar.heights.clear();
         self.live_key = None;
     }
 
@@ -330,6 +331,7 @@ impl TranscriptView {
         if width == self.area.width {
             return;
         }
+        self.scrollbar.heights.clear();
         self.rewrap_snapshot(width);
         if let Some(found) = &mut self.search.current {
             found.layout = Arc::new(found.layout.rewrap(width));

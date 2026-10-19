@@ -110,6 +110,9 @@ impl TranscriptView {
         if !self.area.contains(ScreenPosition::new(column, row)) {
             return None;
         }
+        if column == self.area.right() - 1 && self.scrollbar.painted {
+            return None;
+        }
         let visible = self.visible.get(usize::from(row - self.area.y))?;
         visible.layout.link_at(visible.row, column - self.area.x)
     }
@@ -121,10 +124,12 @@ impl TranscriptView {
         keymap: &crate::keymap::PagerKeymap,
     ) -> bool {
         if keymap.jump_top.is_pressed(key) {
+            self.scrollbar.reveal();
             self.jump_to_beginning(cells);
             return true;
         }
         if keymap.jump_bottom.is_pressed(key) {
+            self.scrollbar.reveal();
             self.jump_to_latest();
             return true;
         }
@@ -143,6 +148,7 @@ impl TranscriptView {
         let Some(delta) = delta else {
             return false;
         };
+        self.scrollbar.reveal();
         self.scroll(cells, delta);
         true
     }
@@ -252,6 +258,9 @@ impl TranscriptView {
         cells: &[Arc<dyn HistoryCell>],
         mode: MouseMode,
     ) -> Option<ViewAction> {
+        if let Some(action) = self.handle_scrollbar_mouse(event, cells) {
+            return Some(action);
+        }
         if mode == MouseMode::Interactive
             && let Some(action) = self.handle_follow_control_mouse(event)
         {
@@ -324,6 +333,7 @@ impl TranscriptView {
                 let rows = self.pending_mouse_scroll as isize;
                 self.pending_mouse_scroll = self.pending_mouse_scroll.fract();
                 if rows != 0 {
+                    self.scrollbar.reveal();
                     self.scroll(cells, rows);
                 }
             }
@@ -454,6 +464,7 @@ impl TranscriptView {
             _ if jump == Some(JumpTarget::Latest) => self.jump_to_latest(),
             _ => return None,
         }
+        self.scrollbar.reveal();
         Some(ViewAction::Changed)
     }
 

@@ -99,7 +99,7 @@ fn page_keys_follow_pager_scroll_bindings() {
         let keymap = crate::keymap::RuntimeKeymap::from_config(&config).unwrap();
         let mut view = TranscriptView::default();
         view.set_keymap_bindings(&keymap);
-        let pre_scroll = render(&mut view, &cells, /*width*/ 20, /*height*/ 8);
+        render(&mut view, &cells, /*width*/ 20, /*height*/ 8);
         assert_eq!(
             view.handle_key(KeyCode::PageUp.into(), &cells).is_some(),
             rows != 0
@@ -108,6 +108,9 @@ fn page_keys_follow_pager_scroll_bindings() {
         let mut expected = TranscriptView::default();
         render(&mut expected, &cells, /*width*/ 20, /*height*/ 8);
         expected.scroll(&cells, -rows);
+        if rows != 0 {
+            expected.scrollbar.reveal();
+        }
         assert_eq!(
             scrolled,
             render(&mut expected, &cells, /*width*/ 20, /*height*/ 8)
@@ -117,9 +120,10 @@ fn page_keys_follow_pager_scroll_bindings() {
             view.handle_key(KeyCode::PageDown.into(), &cells).is_some(),
             rows != 0
         );
+        expected.jump_to_latest();
         assert_eq!(
             render(&mut view, &cells, /*width*/ 20, /*height*/ 8),
-            pre_scroll
+            render(&mut expected, &cells, /*width*/ 20, /*height*/ 8)
         );
         for key in [
             KeyCode::Char('j').into(),
@@ -497,8 +501,8 @@ fn returning_to_latest_cancels_beginning_intent_while_retaining_the_loaded_page(
         assert!(!view.needs_history(&cells));
         insta::allow_duplicates! {
             insta::assert_snapshot!(text(&render(&mut view, &cells, /*width*/ 20, /*height*/ 2)), @"
-            newest answer
-            last line
+            newest answer      ┃
+            last line          ┃
             ");
         }
         view.handle_key(beginning, &cells);

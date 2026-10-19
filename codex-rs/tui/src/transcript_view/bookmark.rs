@@ -29,6 +29,8 @@ impl TranscriptView {
     }
 
     pub(crate) fn restore_bookmark(&mut self, bookmark: TranscriptBookmark) {
+        self.end_scrollbar_interaction();
+        self.scrollbar.heights.clear();
         self.jump_to_latest();
         self.set_presentation(bookmark.detailed, bookmark.mode);
         self.position = bookmark.position;

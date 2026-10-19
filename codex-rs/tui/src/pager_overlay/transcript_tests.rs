@@ -135,7 +135,14 @@ async fn pager_bindings_use_rendered_page_height_and_keep_control_f_navigation()
     }
     let mut restored = Buffer::empty(area);
     overlay.render(area, &mut restored);
-    assert_eq!(restored, initial);
+    let text_area = Rect {
+        width: area.width - 1,
+        ..area
+    };
+    assert_eq!(
+        buffer_to_text(&restored, text_area),
+        buffer_to_text(&initial, text_area)
+    );
     assert!(!overlay.view.has_active_interaction());
     Ok(())
 }
@@ -339,7 +346,7 @@ async fn jump_top_holds_the_visible_page_until_all_history_arrives() -> Result<(
         /*x*/ 0, /*y*/ 0, /*width*/ 27, /*height*/ 8,
     );
     let content = Rect::new(
-        /*x*/ 0, /*y*/ 1, /*width*/ 27, /*height*/ 3,
+        /*x*/ 0, /*y*/ 1, /*width*/ 26, /*height*/ 3,
     );
     let content_and_status = Rect::new(
         /*x*/ 0, /*y*/ 1, /*width*/ 27, /*height*/ 4,
@@ -353,9 +360,9 @@ async fn jump_top_holds_the_visible_page_until_all_history_arrives() -> Result<(
     let mut pending = Buffer::empty(area);
     overlay.render(area, &mut pending);
     assert_snapshot!(buffer_to_text(&pending, content_and_status), @"
-    line 5
-    line 6
-    line 7
+    line 5                    │
+    line 6                    ┃
+    line 7                    ┃
     ↑ Loading… · end latest
     ");
     for label in ["earlier", "oldest"] {
@@ -379,9 +386,9 @@ async fn jump_top_holds_the_visible_page_until_all_history_arrives() -> Result<(
     let mut complete = Buffer::empty(area);
     overlay.render(area, &mut complete);
     assert_snapshot!(buffer_to_text(&complete, content_and_status), @"
-    oldest zero
-    oldest one
-    oldest two
+    oldest zero               ┃
+    oldest one                ┃
+    oldest two                │
     end latest
     ");
     overlay.handle_event(

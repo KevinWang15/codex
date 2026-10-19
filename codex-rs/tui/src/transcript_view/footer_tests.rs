@@ -31,6 +31,7 @@ fn selection_at_bottom_restores_footer_without_resuming_following() {
             history,
             ..TranscriptView::default()
         };
+        view.scrollbar.reveal();
         let initial = render(&mut view, &cells);
         assert!(view.tail_visible);
         assert!(view.is_following());

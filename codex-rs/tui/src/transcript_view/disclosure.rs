@@ -364,6 +364,7 @@ impl TranscriptView {
         self.disclosure.focused = Some(ids);
         self.position = Position::Reading(anchor);
         self.cache.clear();
+        self.scrollbar.heights.clear();
         self.live_key = None;
         self.live_separated = None;
         if matched {

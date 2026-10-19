@@ -249,6 +249,14 @@ async fn plan_menu_allows_transcript_wheel_scrolling_and_keeps_keyboard_ownershi
             }
         }
         let bottom = app.render_owned_transcript(&mut tui, size)?;
+        // Establish the latest viewport with its transient scrollbar already visible.
+        app.handle_tui_event(
+            &mut tui,
+            &mut server,
+            pointer_event(MouseEventKind::ScrollDown, 1, 1),
+        )
+        .await?;
+        app.render_owned_transcript(&mut tui, size)?;
         let latest = screen(&tui);
         let menu = render_bottom_popup(&app.chat_widget, /*width*/ 80);
         for kind in [
@@ -984,5 +992,51 @@ async fn modified_arrows_and_editor_chords_resume_composer_movement() -> Result<
     }
     app_server.shutdown().await?;
     tui.set_owned_screen(/*owned*/ false)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn scrollbar_drag_across_composer_keeps_pointer_ownership() -> Result<()> {
+    let (mut app, _events, _operations) = make_test_app_with_channels().await;
+    app.transcript_cells = vec![Arc::new(PlainHistoryCell::new(
+        (0..200).map(|row| format!("row {row}").into()).collect(),
+    ))];
+    let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    tui.set_owned_screen(true)?;
+    let size = tui.terminal.size()?;
+    let bottom = app.render_owned_transcript(&mut tui, size)?;
+    let column = app.chat_widget.history_wrap_width(size.width) - 1;
+    app.handle_tui_event(
+        &mut tui,
+        &mut server,
+        pointer_event(
+            MouseEventKind::Down(MouseButton::Left),
+            column,
+            bottom.y - 2,
+        ),
+    )
+    .await?;
+    assert!(app.transcript_view.is_dragging_scrollbar());
+    app.handle_tui_event(
+        &mut tui,
+        &mut server,
+        pointer_event(MouseEventKind::Drag(MouseButton::Left), 2, size.height - 1),
+    )
+    .await?;
+    assert!(app.transcript_view.is_dragging_scrollbar());
+    app.handle_tui_event(
+        &mut tui,
+        &mut server,
+        pointer_event(MouseEventKind::Up(MouseButton::Left), 2, size.height - 1),
+    )
+    .await?;
+    assert!(!app.transcript_view.is_dragging_scrollbar());
+    assert!(
+        app.transcript_view
+            .selected_text(&app.transcript_cells)
+            .is_none()
+    );
+    assert!(app.chat_widget.composer_is_empty());
     Ok(())
 }

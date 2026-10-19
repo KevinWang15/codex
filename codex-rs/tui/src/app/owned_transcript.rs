@@ -336,6 +336,9 @@ impl App {
         if let Some(delay) = blossom_tick {
             tui.frame_requester().schedule_frame_in(delay);
         }
+        if let Some(delay) = view.scrollbar_hide_delay() {
+            tui.frame_requester().schedule_frame_in(delay);
+        }
         let animating =
             view.is_following() && active_key.is_some_and(|key| key.animation_tick.is_some());
         let loading = view.is_loading_history() && motion == MotionMode::Animated;
@@ -375,6 +378,7 @@ impl App {
             || (!self.chat_widget.no_modal_or_popup_active() && !modal_transcript_event)
         {
             self.transcript_view.end_drag();
+            self.transcript_view.end_scrollbar_interaction();
         }
         if !tui.is_owned_screen()
             || matches!(event, TuiEvent::FocusLost | TuiEvent::Resume)
@@ -412,6 +416,13 @@ impl App {
             if mouse.kind != crossterm::event::MouseEventKind::Moved {
                 let size = tui.prepare_draw_size()?;
                 self.render_owned_transcript(tui, size)?;
+            }
+            if self.transcript_view.is_dragging_scrollbar() {
+                self.transcript_view
+                    .handle_mouse(*mouse, &self.transcript_cells);
+                self.request_owned_history(tui, app_server);
+                tui.frame_requester().schedule_frame();
+                return Ok(true);
             }
             if self.chat_widget.no_modal_or_popup_active()
                 && self

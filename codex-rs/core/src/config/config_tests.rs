@@ -1775,6 +1775,7 @@ async fn network_proxy_feature_is_no_op_without_sandbox_network() -> std::io::Re
     let cwd = TempDir::new()?;
     let config = Config::load_from_base_config_with_overrides(
         ConfigToml {
+            sandbox_mode: Some(SandboxMode::ReadOnly),
             features: Some(toml::from_str("network_proxy = true").expect("valid features")),
             ..Default::default()
         },
@@ -3633,35 +3634,22 @@ async fn empty_config_defaults_to_builtin_profile_for_trusted_project(
     )
     .await?;
 
-    let mxc_selected = prefer_mxc && codex_sandboxing::windows_mxc_available();
-    let policy = config.permissions.file_system_sandbox_policy();
+    assert_eq!(
+        config.permissions.effective_permission_profile(),
+        PermissionProfile::Disabled
+    );
+    assert_eq!(
+        config.permissions.approval_policy.value(),
+        AskForApproval::Never
+    );
     assert_eq!(
         config
             .permissions
             .active_permission_profile()
             .as_ref()
-            .map(|active| active.id.as_str()),
-        Some(if cfg!(target_os = "windows") && !mxc_selected {
-            BUILT_IN_PERMISSION_PROFILE_READ_ONLY
-        } else {
-            BUILT_IN_PERMISSION_PROFILE_WORKSPACE
-        })
+            .map(|profile| profile.id.as_str()),
+        Some(BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS)
     );
-    if cfg!(target_os = "windows") && !mxc_selected {
-        assert!(
-            !policy.can_write_local_path_with_cwd(cwd.path(), cwd.path()),
-            "expected trusted project fallback to stay read-only without Windows sandbox support, policy: {policy:?}"
-        );
-    } else {
-        assert!(
-            policy.can_write_local_path_with_cwd(cwd.path(), cwd.path()),
-            "expected trusted project fallback to use :workspace, policy: {policy:?}"
-        );
-        assert!(
-            !policy.can_write_local_path_with_cwd(&cwd.path().join(".codex"), cwd.path()),
-            "expected :workspace metadata carveouts, policy: {policy:?}"
-        );
-    }
     Ok(())
 }
 
@@ -3689,43 +3677,27 @@ async fn empty_config_defaults_to_builtin_profile_for_untrusted_project() -> std
     )
     .await?;
 
-    let policy = config.permissions.file_system_sandbox_policy();
+    assert_eq!(
+        config.permissions.effective_permission_profile(),
+        PermissionProfile::Disabled
+    );
+    assert_eq!(
+        config.permissions.approval_policy.value(),
+        AskForApproval::Never
+    );
     assert_eq!(
         config
             .permissions
             .active_permission_profile()
             .as_ref()
-            .map(|active| active.id.as_str()),
-        Some(if cfg!(target_os = "windows") {
-            BUILT_IN_PERMISSION_PROFILE_READ_ONLY
-        } else {
-            BUILT_IN_PERMISSION_PROFILE_WORKSPACE
-        })
+            .map(|profile| profile.id.as_str()),
+        Some(BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS)
     );
-    assert!(
-        policy.can_read_local_path_with_cwd(cwd.path(), cwd.path()),
-        "expected untrusted project fallback to allow reads, policy: {policy:?}"
-    );
-    if cfg!(target_os = "windows") {
-        assert!(
-            !policy.can_write_local_path_with_cwd(cwd.path(), cwd.path()),
-            "expected untrusted project fallback to stay read-only without Windows sandbox support, policy: {policy:?}"
-        );
-    } else {
-        assert!(
-            policy.can_write_local_path_with_cwd(cwd.path(), cwd.path()),
-            "expected untrusted project fallback to use :workspace, policy: {policy:?}"
-        );
-        assert!(
-            !policy.can_write_local_path_with_cwd(&cwd.path().join(".codex"), cwd.path()),
-            "expected :workspace metadata carveouts, policy: {policy:?}"
-        );
-    }
     Ok(())
 }
 
 #[tokio::test]
-async fn implicit_builtin_workspace_profile_preserves_sandbox_workspace_write_settings()
+async fn configured_workspace_profile_preserves_sandbox_workspace_write_settings()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -3735,6 +3707,7 @@ async fn implicit_builtin_workspace_profile_preserves_sandbox_workspace_write_se
 
     let config = Config::load_from_base_config_with_overrides(
         ConfigToml {
+            sandbox_mode: Some(SandboxMode::WorkspaceWrite),
             projects: Some(HashMap::from([(
                 project_key,
                 ProjectConfig {
@@ -3764,7 +3737,7 @@ async fn implicit_builtin_workspace_profile_preserves_sandbox_workspace_write_se
     let policy = config.permissions.file_system_sandbox_policy();
     assert!(
         policy.can_write_local_path_with_cwd(extra_root.as_path(), cwd.path()),
-        "expected implicit :workspace to preserve sandbox_workspace_write.writable_roots, policy: {policy:?}"
+        "expected configured workspace-write to preserve sandbox_workspace_write.writable_roots, policy: {policy:?}"
     );
     assert_eq!(
         config.permissions.network_sandbox_policy(),
@@ -3773,7 +3746,7 @@ async fn implicit_builtin_workspace_profile_preserves_sandbox_workspace_write_se
     assert_eq!(
         config.permissions.active_permission_profile(),
         None,
-        "implicit :workspace cannot be faithfully re-selected when it includes \
+        "configured workspace-write cannot be faithfully re-selected when it includes \
          legacy sandbox_workspace_write settings"
     );
     match config.legacy_sandbox_policy() {
@@ -3794,8 +3767,8 @@ async fn implicit_builtin_workspace_profile_preserves_sandbox_workspace_write_se
 }
 
 #[tokio::test]
-async fn implicit_builtin_workspace_profile_preserves_add_dir_metadata_carveouts()
--> std::io::Result<()> {
+async fn configured_workspace_profile_preserves_add_dir_metadata_carveouts() -> std::io::Result<()>
+{
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
     let extra_root = TempDir::new()?;
@@ -3806,6 +3779,7 @@ async fn implicit_builtin_workspace_profile_preserves_add_dir_metadata_carveouts
 
     let config = Config::load_from_base_config_with_overrides(
         ConfigToml {
+            sandbox_mode: Some(SandboxMode::WorkspaceWrite),
             projects: Some(HashMap::from([(
                 project_key,
                 ProjectConfig {
@@ -3831,12 +3805,12 @@ async fn implicit_builtin_workspace_profile_preserves_add_dir_metadata_carveouts
     let extra_root = extra_root.path().abs();
     assert!(
         policy.can_write_local_path_with_cwd(extra_root.as_path(), cwd.path()),
-        "expected implicit :workspace to preserve additional writable roots, policy: {policy:?}"
+        "expected configured workspace-write to preserve additional writable roots, policy: {policy:?}"
     );
     for subpath in [".git", ".agents", ".codex", ".aws"] {
         assert!(
             !policy.can_write_local_path_with_cwd(&extra_root.join(subpath), cwd.path()),
-            "expected implicit :workspace to preserve legacy metadata carveout for {subpath}, \
+            "expected configured workspace-write to preserve legacy metadata carveout for {subpath}, \
              policy: {policy:?}"
         );
     }
@@ -3844,8 +3818,7 @@ async fn implicit_builtin_workspace_profile_preserves_add_dir_metadata_carveouts
 }
 
 #[tokio::test]
-async fn empty_config_defaults_to_builtin_read_only_without_trust_decision() -> std::io::Result<()>
-{
+async fn empty_config_defaults_to_full_access_without_trust_decision() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
 
@@ -3859,14 +3832,21 @@ async fn empty_config_defaults_to_builtin_read_only_without_trust_decision() -> 
     )
     .await?;
 
-    let policy = config.permissions.file_system_sandbox_policy();
-    assert!(
-        policy.can_read_local_path_with_cwd(cwd.path(), cwd.path()),
-        "expected :read-only to allow reads, policy: {policy:?}"
+    assert_eq!(
+        config.permissions.effective_permission_profile(),
+        PermissionProfile::Disabled
     );
-    assert!(
-        !policy.can_write_local_path_with_cwd(cwd.path(), cwd.path()),
-        "expected :read-only to deny writes, policy: {policy:?}"
+    assert_eq!(
+        config.permissions.approval_policy.value(),
+        AskForApproval::Never
+    );
+    assert_eq!(
+        config
+            .permissions
+            .active_permission_profile()
+            .as_ref()
+            .map(|profile| profile.id.as_str()),
+        Some(BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS)
     );
     Ok(())
 }
@@ -11006,6 +10986,7 @@ async fn untrusted_parent_repo_with_incomplete_child_git_keeps_unless_trusted_ap
 
     let config = Config::load_from_base_config_with_overrides(
         ConfigToml {
+            sandbox_mode: Some(SandboxMode::ReadOnly),
             projects: Some(HashMap::from([(
                 repo.path().to_string_lossy().to_string(),
                 ProjectConfig {
@@ -11037,6 +11018,7 @@ async fn test_untrusted_project_gets_unless_trusted_approval_policy() -> anyhow:
 
     let config = Config::load_from_base_config_with_overrides(
         ConfigToml {
+            sandbox_mode: Some(SandboxMode::WorkspaceWrite),
             projects: Some(HashMap::from([(
                 test_path.to_string_lossy().to_string(),
                 ProjectConfig {
@@ -13605,5 +13587,51 @@ async fn fork_startup_update_checks_are_opt_in() -> std::io::Result<()> {
     )?;
     let config = load_with_enterprise_requirement(&codex_home, "").await?;
     assert!(config.check_for_update_on_startup);
+    Ok(())
+}
+
+#[tokio::test]
+async fn fork_full_access_default_preserves_explicit_approval_policy() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    let cwd = TempDir::new()?;
+    let config = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            approval_policy: Some(AskForApproval::OnRequest),
+            ..Default::default()
+        },
+        ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        },
+        codex_home.abs(),
+    )
+    .await?;
+    assert_eq!(
+        config.permissions.effective_permission_profile(),
+        PermissionProfile::Disabled
+    );
+    assert_eq!(
+        config.permissions.approval_policy.value(),
+        AskForApproval::OnRequest
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn fork_full_access_default_respects_required_read_only_permissions() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    let config = load_with_enterprise_requirement(
+        &codex_home,
+        "allowed_sandbox_modes = [\"read-only\"]\nallowed_approval_policies = [\"never\"]\n",
+    )
+    .await?;
+    assert_eq!(
+        config.permissions.effective_permission_profile(),
+        PermissionProfile::read_only()
+    );
+    assert_eq!(
+        config.permissions.approval_policy.value(),
+        AskForApproval::Never
+    );
     Ok(())
 }

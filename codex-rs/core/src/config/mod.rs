@@ -3645,10 +3645,20 @@ impl Config {
         .into_iter()
         .filter(|profile| !is_builtin_permission_profile_name(&profile.id))
         .collect();
+        let default_builtin_profile = default_builtin_permission_profile_name(
+            &active_project,
+            legacy_windows_sandbox_level,
+            constrained_permission_profile.can_set(&PermissionProfile::Disabled).is_ok()
+                && network_requirements.is_none()
+                && filesystem_requirements.as_ref().is_none_or(|requirements| requirements.value.deny_read.is_empty()),
+        );
         let using_implicit_builtin_profile = !effective_permission_selection
             .persisted_profile_id_was_provided
             && permission_config_syntax.is_none()
             && effective_permission_selection.selected_profile_id.is_none();
+        let use_full_access_defaults = using_implicit_builtin_profile
+            && permission_profile.is_none()
+            && persisted_permission_profile.is_none();
         let should_seed_legacy_workspace_roots = effective_permission_selection
             .selected_profile_id
             .is_none()
@@ -3698,12 +3708,7 @@ impl Config {
                     // without broadening network behavior.
                     let default_permissions = effective_permission_selection
                         .selected_profile_id
-                        .unwrap_or_else(|| {
-                            default_builtin_permission_profile_name(
-                                &active_project,
-                                legacy_windows_sandbox_level,
-                            )
-                        });
+                        .unwrap_or(default_builtin_profile);
                     network_proxy_config_for_profile_selection(
                         effective_permission_selection.profiles.as_ref(),
                         default_permissions,
@@ -3721,12 +3726,7 @@ impl Config {
         } else if profiles_are_active {
             let default_permissions = effective_permission_selection
                 .selected_profile_id
-                .unwrap_or_else(|| {
-                    default_builtin_permission_profile_name(
-                        &active_project,
-                        legacy_windows_sandbox_level,
-                    )
-                });
+                .unwrap_or(default_builtin_profile);
             let builtin_workspace_write_settings = if using_implicit_builtin_profile {
                 cfg.sandbox_workspace_write.as_ref().map(|settings| WorkspaceWriteSettings {
                     writable_roots: settings.writable_roots.iter().map(PathUri::from_abs_path).collect(),
@@ -3854,7 +3854,9 @@ impl Config {
         let mut approval_policy = approval_policy_override
             .or(cfg.approval_policy)
             .unwrap_or_else(|| {
-                if active_project.is_trusted() {
+                if use_full_access_defaults && permission_profile == PermissionProfile::Disabled {
+                    AskForApproval::Never
+                } else if active_project.is_trusted() {
                     AskForApproval::OnRequest
                 } else if active_project.is_untrusted() {
                     AskForApproval::UnlessTrusted

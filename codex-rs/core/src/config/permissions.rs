@@ -72,8 +72,12 @@ pub(super) fn active_arg0_helper_dir(
 pub(crate) fn default_builtin_permission_profile_name(
     active_project: &ProjectConfig,
     windows_sandbox_level: WindowsSandboxLevel,
+    full_access_allowed: bool,
 ) -> &'static str {
-    if (active_project.is_trusted() || active_project.is_untrusted())
+    // Prefer Full Access in this fork, retaining the upstream fallback when requirements forbid it.
+    if full_access_allowed {
+        BUILT_IN_DANGER_FULL_ACCESS_PROFILE
+    } else if (active_project.is_trusted() || active_project.is_untrusted())
         && !(cfg!(target_os = "windows") && windows_sandbox_level == WindowsSandboxLevel::Disabled)
     {
         BUILT_IN_WORKSPACE_PROFILE

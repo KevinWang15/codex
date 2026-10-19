@@ -29,7 +29,7 @@ impl Default for DaemonSettings {
         Self {
             remote_control_enabled: false,
             feature_overrides: BTreeMap::new(),
-            auto_update_enabled: true,
+            auto_update_enabled: default_auto_update_enabled(),
             update_interval_minutes: DEFAULT_UPDATE_INTERVAL_MINUTES,
             shutdown_grace_seconds: DEFAULT_SHUTDOWN_GRACE_SECONDS,
         }
@@ -85,7 +85,7 @@ impl Default for UpdaterSettings {
 }
 
 fn default_auto_update_enabled() -> bool {
-    true
+    false
 }
 
 fn default_update_interval_minutes() -> u32 {

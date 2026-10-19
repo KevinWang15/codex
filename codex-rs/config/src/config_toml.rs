@@ -524,8 +524,8 @@ pub struct ConfigToml {
     pub project_root_markers: Option<Vec<String>>,
 
     /// When `true`, checks for Codex updates on startup and surfaces update prompts.
-    /// Set to `false` only if your Codex updates are centrally managed.
-    /// Defaults to `true`.
+    /// Disabled by default in this fork so startup does not offer upstream upgrades.
+    /// Set to `true` to opt in.
     pub check_for_update_on_startup: Option<bool>,
 
     /// Legacy fallback for `tui.disable_paste_burst`. Prefer the setting under `[tui]`.

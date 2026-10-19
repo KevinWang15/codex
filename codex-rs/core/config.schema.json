@@ -6976,7 +6976,7 @@
       "type": "string"
     },
     "check_for_update_on_startup": {
-      "description": "When `true`, checks for Codex updates on startup and surfaces update prompts. Set to `false` only if your Codex updates are centrally managed. Defaults to `true`.",
+      "description": "When `true`, checks for Codex updates on startup and surfaces update prompts. Disabled by default in this fork so startup does not offer upstream upgrades. Set to `true` to opt in.",
       "type": "boolean"
     },
     "cli_auth_credentials_store": {

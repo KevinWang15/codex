@@ -13593,3 +13593,17 @@ fn sqlite_home_env_conflict_reports_an_override() -> std::io::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn fork_startup_update_checks_are_opt_in() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    let config = load_with_enterprise_requirement(&codex_home, "").await?;
+    assert!(!config.check_for_update_on_startup);
+    std::fs::write(
+        codex_home.path().join(CONFIG_TOML_FILE),
+        "check_for_update_on_startup = true\n",
+    )?;
+    let config = load_with_enterprise_requirement(&codex_home, "").await?;
+    assert!(config.check_for_update_on_startup);
+    Ok(())
+}

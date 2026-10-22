@@ -19,6 +19,7 @@ use crate::hook_runtime::run_post_compact_hooks;
 use crate::hook_runtime::run_pre_compact_hooks;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CompactionTurnMetadata;
+use crate::responses_retry::retry_model_capacity_error;
 use crate::session::RequestEffortUsage;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
@@ -359,6 +360,9 @@ async fn run_compact_task_inner_impl(
                 return Err(e);
             }
             Err(e) => {
+                if retry_model_capacity_error(&sess, &turn_context, &e).await {
+                    continue;
+                }
                 if retries < max_retries {
                     retries += 1;
                     let delay = backoff(retries);

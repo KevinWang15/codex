@@ -3211,7 +3211,7 @@ async fn pre_sampling_compact_advised_errors_fall_back_then_retry_on_selected_mo
     .await;
     let overload = wiremock::ResponseTemplate::new(/*s*/ 503)
         .insert_header("Retry-After", "0")
-        .set_body_json(json!({ "error": { "code": "server_is_overloaded" } }));
+        .set_body_json(json!({ "error": { "code": "slow_down" } }));
     let mut responses = vec![
         sse_response(sse(vec![
             ev_assistant_message("m1", "before switch"),
@@ -3275,14 +3275,14 @@ async fn pre_sampling_compact_advised_errors_fall_back_then_retry_on_selected_mo
                 EventMsg::TurnComplete(event) => {
                     assert_eq!(
                         event.error.and_then(|error| error.codex_error_info),
-                        Some(CodexErrorInfo::ServerOverloaded)
+                        Some(CodexErrorInfo::RateLimitExceeded)
                     );
                     break;
                 }
                 _ => {}
             }
         }
-        assert_eq!(errors, vec![Some(CodexErrorInfo::ServerOverloaded)]);
+        assert_eq!(errors, vec![Some(CodexErrorInfo::RateLimitExceeded)]);
     }
     let actual_models = request_log
         .requests()
@@ -3319,7 +3319,7 @@ async fn manual_remote_compact_advice_respects_retry_limit(max_retries: u64) {
     let server = start_mock_server().await;
     let overload = wiremock::ResponseTemplate::new(/*s*/ 503)
         .insert_header("Retry-After", "0")
-        .set_body_json(json!({ "error": { "code": "server_is_overloaded" } }));
+        .set_body_json(json!({ "error": { "code": "slow_down" } }));
     let request_log =
         mount_response_sequence(&server, vec![overload; (max_retries + 1) as usize]).await;
     let mut model_provider = openai_model_provider(&server);
@@ -3346,14 +3346,14 @@ async fn manual_remote_compact_advice_respects_retry_limit(max_retries: u64) {
             EventMsg::TurnComplete(event) => {
                 assert_eq!(
                     event.error.and_then(|error| error.codex_error_info),
-                    Some(CodexErrorInfo::ServerOverloaded)
+                    Some(CodexErrorInfo::RateLimitExceeded)
                 );
                 break;
             }
             _ => {}
         }
     }
-    assert_eq!(errors, vec![Some(CodexErrorInfo::ServerOverloaded)]);
+    assert_eq!(errors, vec![Some(CodexErrorInfo::RateLimitExceeded)]);
     assert_eq!(
         reconnect_messages,
         (1..=max_retries)

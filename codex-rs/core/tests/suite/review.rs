@@ -299,14 +299,14 @@ async fn review_op_emits_lifecycle_and_review_output() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn review_overload_preserves_lifecycle_order() {
+async fn review_failure_preserves_lifecycle_order() {
     skip_if_no_network!();
 
     let server = start_mock_server().await;
     responses::mount_response_once(
         &server,
-        ResponseTemplate::new(503)
-            .set_body_json(serde_json::json!({ "error": { "code": "server_is_overloaded" } })),
+        ResponseTemplate::new(429)
+            .set_body_json(serde_json::json!({ "error": { "code": "flex_unavailable" } })),
     )
     .await;
     let codex = new_conversation_for_server(&server, Arc::new(TempDir::new().unwrap()), |config| {

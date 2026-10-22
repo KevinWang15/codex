@@ -1,6 +1,6 @@
 //! Shared retry and transport fallback decisions for Responses requests.
 //! Content-filter guidance is recorded for sampling requests before retry decisions.
-//! Server advice controls timing without extending configured retry limits.
+//! Model capacity failures retry indefinitely; other failures retain their configured limits.
 
 use std::time::Duration;
 
@@ -22,6 +22,32 @@ use tracing::warn;
 
 const INITIAL_CONNECTION_RETRY_DELAY: Duration = Duration::from_secs(5);
 const MAX_CONNECTION_RETRY_DELAY: Duration = Duration::from_secs(60);
+const MODEL_CAPACITY_RETRY_DELAY: Duration = Duration::from_secs(3);
+
+/// Capacity notices are UI events and diagnostic logs, never conversation items.
+/// Callers retain ownership of cancellation while this future waits.
+pub(crate) async fn retry_model_capacity_error(
+    sess: &Session,
+    turn_context: &TurnContext,
+    err: &CodexErr,
+) -> bool {
+    if !matches!(err.details(), CodexErrorDetails::ServerOverloaded) {
+        return false;
+    }
+    warn!(
+        turn_id = %turn_context.sub_id,
+        retry_delay_secs = MODEL_CAPACITY_RETRY_DELAY.as_secs(),
+        "selected model is at capacity; retrying request"
+    );
+    sess.notify_stream_error(
+        turn_context,
+        "Model is at capacity. Retrying in 3 seconds...",
+        CodexErr::ServerOverloaded,
+    )
+    .await;
+    tokio::time::sleep(MODEL_CAPACITY_RETRY_DELAY).await;
+    true
+}
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResponsesStreamRequest {
@@ -64,6 +90,11 @@ pub(crate) async fn handle_response_stream_error(
     request: ResponsesStreamRequest,
 ) -> Result<(), CodexErr> {
     let turn_context = &step_context.turn;
+    // Capacity is temporary, regardless of retry advice or the normal retry budget.
+    // Retry the same model and transport without consuming that budget.
+    if retry_model_capacity_error(sess, turn_context, &err).await {
+        return Ok(());
+    }
     if matches!(request, ResponsesStreamRequest::Sampling)
         && matches!(err.details(), CodexErrorDetails::ContentFilter)
     {
